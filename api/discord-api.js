@@ -7,11 +7,11 @@ const c = process.env.webhook_abuse
 const d = process.env.webhook_invalid
 const e = process.env.webhook_error
 
-const f = new Map() 
-const g = new Map() 
-const h = new Map() 
-const i = new Map() 
-const j = new Set() 
+const f = new Map()
+const g = new Map()
+const h = new Map()
+const i = new Map()
+const j = new Map()
 
 function k(l){
     return crypto.createHash("sha256").update(l).digest("hex")
@@ -31,33 +31,45 @@ async function n(o,p){
 
 export default async function handler(q,r){
 
-    if(q.method !== "POST"){
-        return r.status(405).end()
-    }
-
     const s = q.headers["x-forwarded-for"] || q.socket.remoteAddress
     const t = Date.now()
 
+    const u = q.headers["user-agent"] || "desconhecido"
+
+    const v = q.method
+
+    const w = u.toLowerCase().includes("mozilla") ? "navegador" : "executor"
+
     if(j.has(s)){
-        return r.status(403).end()
+
+        const aa = j.get(s)
+
+        if(t < aa){
+            return r.status(403).end()
+        }
+
+        j.delete(s)
     }
 
     const {
-        username:u,
-        userId:v,
-        experience:w,
-        timestamp:x,
-        nonce:y,
-        signature:z
+        username:x,
+        userId:y,
+        experience:z,
+        timestamp:aa,
+        nonce:ab,
+        signature:ac
     } = q.body || {}
 
-    if(!u || !v || !w || !x || !y || !z){
+    if(!x || !y || !z || !aa || !ab || !ac){
 
         await n(d,{
             embeds:[{
                 title:"request invalido",
                 fields:[
                     {name:"ip",value:String(s)},
+                    {name:"user agent",value:String(u)},
+                    {name:"tipo request",value:v},
+                    {name:"origem",value:w},
                     {name:"horario",value:m()}
                 ]
             }]
@@ -66,13 +78,15 @@ export default async function handler(q,r){
         return r.status(400).end()
     }
 
-    if(Math.abs(t - x) > 10000){
+    if(Math.abs(t - aa) > 10000){
 
         await n(d,{
             embeds:[{
                 title:"request expirado",
                 fields:[
                     {name:"ip",value:String(s)},
+                    {name:"user agent",value:String(u)},
+                    {name:"tipo request",value:v},
                     {name:"horario",value:m()}
                 ]
             }]
@@ -81,20 +95,13 @@ export default async function handler(q,r){
         return r.status(403).end()
     }
 
-    if(f.has(y)){
-        return r.status(403).end()
-    }
+    if(f.has(ab)){
 
-    f.set(y,true)
-
-    const aa = k(`${u}:${v}:${w}:${x}:${y}:${a}`)
-
-    if(aa !== z){
-
-        await n(d,{
+        await n(c,{
             embeds:[{
-                title:"assinatura invalida",
+                title:"replay detectado",
                 fields:[
+                    {name:"nonce",value:String(ab)},
                     {name:"ip",value:String(s)},
                     {name:"horario",value:m()}
                 ]
@@ -104,40 +111,63 @@ export default async function handler(q,r){
         return r.status(403).end()
     }
 
-    const ab = g.get(s)
+    f.set(ab,true)
 
-    if(ab && t - ab < 3000){
+    const ad = k(`${x}:${y}:${z}:${aa}:${ab}:${a}`)
 
-        let ac = i.get(s) || 0
-        ac++
+    if(ad !== ac){
 
-        i.set(s,ac)
+        await n(d,{
+            embeds:[{
+                title:"assinatura invalida",
+                fields:[
+                    {name:"ip",value:String(s)},
+                    {name:"user agent",value:String(u)},
+                    {name:"tipo request",value:v},
+                    {name:"horario",value:m()}
+                ]
+            }]
+        })
 
-        if(ac % 10 === 0){
+        return r.status(403).end()
+    }
+
+    const ae = g.get(s)
+
+    if(ae && t - ae < 3000){
+
+        let af = i.get(s) || 0
+        af++
+
+        i.set(s,af)
+
+        if(af % 10 === 0){
 
             await n(c,{
                 embeds:[{
                     title:"abuse detectado",
                     fields:[
                         {name:"ip",value:String(s)},
-                        {name:"tentativas",value:`x${ac}`},
+                        {name:"tentativas",value:`x${af}`},
+                        {name:"user agent",value:String(u)},
                         {name:"horario",value:m()}
                     ]
                 }]
             })
         }
 
-        if(ac >= 30){
+        if(af >= 30){
 
-            j.add(s)
+            j.set(s, t + 900000)
 
             await n(c,{
                 embeds:[{
                     title:"ip banido",
                     fields:[
                         {name:"ip",value:String(s)},
-                        {name:"tentativas",value:`x${ac}`},
-                        {name:"motivo",value:"spam"},
+                        {name:"tentativas",value:`x${af}`},
+                        {name:"duracao",value:"15 minutos"},
+                        {name:"user agent",value:String(u)},
                         {name:"horario",value:m()}
                     ]
                 }]
@@ -149,27 +179,27 @@ export default async function handler(q,r){
 
     g.set(s,t)
 
-    const ad = h.get(v)
+    const ag = h.get(y)
 
-    if(ad && t - ad < 15000){
+    if(ag && t - ag < 15000){
         return r.status(429).end()
     }
 
-    h.set(v,t)
+    h.set(y,t)
 
     try{
 
-        const ae = await fetch(`https://users.roblox.com/v1/users/${v}`)
-        const af = await ae.json()
+        const ah = await fetch(`https://users.roblox.com/v1/users/${y}`)
+        const ai = await ah.json()
 
-        if(!af.name || af.name.toLowerCase() !== u.toLowerCase()){
+        if(!ai.name || ai.name.toLowerCase() !== x.toLowerCase()){
 
             await n(d,{
                 embeds:[{
                     title:"username mismatch",
                     fields:[
-                        {name:"username enviado",value:String(u)},
-                        {name:"username real",value:String(af.name || "desconhecido")},
+                        {name:"username enviado",value:String(x)},
+                        {name:"username real",value:String(ai.name || "desconhecido")},
                         {name:"ip",value:String(s)},
                         {name:"horario",value:m()}
                     ]
@@ -183,10 +213,14 @@ export default async function handler(q,r){
             embeds:[{
                 title:"execucao",
                 fields:[
-                    {name:"username",value:String(u),inline:true},
-                    {name:"userid",value:String(v),inline:true},
-                    {name:"experiencia",value:String(w),inline:true},
+                    {name:"username",value:String(ai.name),inline:true},
+                    {name:"displayName",value:String(ai.displayName),inline:true},
+                    {name:"userId",value:String(y),inline:true},
+                    {name:"experiencia",value:String(z)},
+                    {name:"executor",value:w},
+                    {name:"user agent",value:String(u)},
                     {name:"ip",value:String(s)},
+                    {name:"tipo request",value:v},
                     {name:"horario",value:m()}
                 ]
             }]
@@ -201,6 +235,7 @@ export default async function handler(q,r){
                 title:"erro interno",
                 fields:[
                     {name:"ip",value:String(s)},
+                    {name:"user agent",value:String(u)},
                     {name:"horario",value:m()}
                 ]
             }]
